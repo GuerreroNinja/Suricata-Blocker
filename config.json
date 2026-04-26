@@ -1,0 +1,32 @@
+{
+    "script_path": "/usr/local/bin/suricata-blocker.sh",
+    "block_file": "/tmp/suricata_blocked_ips.txt",
+    "superban_file": "/etc/suricata/superbanned_ips.txt",
+
+    "grep_patterns": [
+        "ET DROP",
+        "ET TOR",
+        "ET MALWARE",
+        "ET TROJAN",
+        "ET RANSOMWARE",
+        "ET EXPLOIT",
+        "ET SCAN",
+        "ET HUNTING",
+        "ET BOTNET",
+        "ET C2",
+        "ET COMMAND",
+        "ET SHELLCODE",
+        "BRUTE FORCE",
+        "BRUTEFORCE",
+        "PORTSCAN",
+        "NMAP",
+        "SCAN",
+        "EXPLOIT",
+        "SQL INJECTION",
+        "C2",
+        "MALWARE",
+        "DOS",
+        "DDOS",
+        "ATTACK"
+    ]
+}

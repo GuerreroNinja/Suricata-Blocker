@@ -11,6 +11,28 @@ echo "[*] Suricata IPS started"
 touch "$STATE"
 touch "$SUPERBAN_FILE"
 
+PATTERNS=""
+PATTERNS_LOADED=0
+WARNED_EMPTY=0
+
+# -------------------------
+# RESOLVE ORIGINAL USER
+# -------------------------
+ORIGINAL_USER=$(logname 2>/dev/null)
+
+if [[ -z "$ORIGINAL_USER" && -n "$PKEXEC_UID" ]]; then
+    ORIGINAL_USER=$(getent passwd "$PKEXEC_UID" | cut -d: -f1)
+fi
+
+if [[ -z "$ORIGINAL_USER" ]]; then
+    ORIGINAL_USER="$USER"
+fi
+
+USER_HOME=$(getent passwd "$ORIGINAL_USER" | cut -d: -f6)
+CONFIG_FILE="$USER_HOME/.config/suricata-blocker/config.json"
+echo "[DEBUG] CONFIG_FILE=$CONFIG_FILE"
+echo "[DEBUG] exists=$( [[ -f "$CONFIG_FILE" ]] && echo yes || echo no )"
+
 # -------------------------
 # CLEAN DROP ZONE
 # -------------------------
@@ -105,8 +127,66 @@ is_whitelisted() {
     return 1
 }
 
+load_patterns() {
+    if [[ $PATTERNS_LOADED -eq 1 ]]; then
+        return
+    fi
+
+    if command -v jq >/dev/null 2>&1 && [[ -f "$CONFIG_FILE" ]]; then
+
+        PATTERNS=$(jq -r '.grep_patterns[]' "$CONFIG_FILE" 2>/dev/null)
+
+        if [[ -z "$PATTERNS" ]]; then
+            if [[ $WARNED_EMPTY -eq 0 ]]; then
+                echo "[WARN] grep_patterns empty in config.json → using DEFAULT patterns"
+                WARNED_EMPTY=1
+            fi
+        else
+            echo "[INFO] Loaded grep_patterns:"
+            echo "$PATTERNS" | sed 's/^/  - /'
+        fi
+    fi
+
+    PATTERNS_LOADED=1
+}
+
 is_bad_alert() {
-    echo "$1" | grep -Eqi "ET DROP|ET TOR|ET MALWARE|SCAN|EXPLOIT"
+    local sig="$1"
+    [[ -z "$sig" ]] && return 1
+
+    load_patterns
+
+    if [[ -n "$PATTERNS" ]]; then
+        grep -Ff <(printf "%s\n" "$PATTERNS") <<< "$sig" >/dev/null 2>&1
+        return $?
+    fi
+
+    echo "$sig" | grep -Eqi "
+        ET DROP|
+        ET TOR|
+        ET MALWARE|
+        ET TROJAN|
+        ET RANSOMWARE|
+        ET EXPLOIT|
+        ET SCAN|
+        ET HUNTING|
+        ET BOTNET|
+        ET C2|
+        ET COMMAND|
+        ET SHELLCODE|
+        BRUTE FORCE|
+        BRUTEFORCE|
+        PORTSCAN|
+        NMAP|
+        SCAN|
+        EXPLOIT|
+        SQL INJECTION|
+        C2|
+        MALWARE|
+        DOS|
+        DDOS|
+        ATTACK
+    "
 }
 
 already_blocked() {

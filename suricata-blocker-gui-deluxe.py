@@ -63,6 +63,7 @@ process = None
 # -----------------------------
 selected_blocked_ip = None
 selected_superban_ip = None
+selected_drop_ip = None
 
 # -----------------------------
 # LOG
@@ -227,6 +228,39 @@ drop_listbox.config(yscrollcommand=scroll_drop.set)
 scroll_drop.pack(side=tk.RIGHT, fill=tk.Y)
 drop_listbox.pack(fill="both", expand=True)
 
+def on_drop_select(event):
+    global selected_drop_ip
+    sel = drop_listbox.curselection()
+    if sel:
+        selected_drop_ip = drop_listbox.get(sel[0])
+
+drop_listbox.bind("<<ListboxSelect>>", on_drop_select)
+
+# =========================================================
+# REMOVE FROM DROP ZONE
+# =========================================================
+def remove_from_drop_zone():
+    global selected_drop_ip
+
+    ip = extract_ip(selected_drop_ip)
+
+    if not ip:
+        safe_log("[!] Select a valid IP from DROP ZONE")
+        return
+
+    safe_log(f"[DROP UNBAN] {ip}")
+
+    subprocess.run([
+        "pkexec", "firewall-cmd",
+        "--permanent",
+        "--zone=drop",
+        "--remove-source=" + ip
+    ])
+
+    subprocess.run(["pkexec", "firewall-cmd", "--reload"])
+
+    update_drop_zone()
+
 # =========================================================
 # FIREWALL
 # =========================================================
@@ -348,6 +382,9 @@ tk.Button(top_bar, text="SUPERBAN", bg="red", fg="white",
 
 tk.Button(top_bar, text="SUPERUNBAN", bg="orange",
           command=superunban_tool).pack(side=tk.LEFT, padx=5)
+          
+tk.Button(top_bar, text="REMOVE FROM DROP ZONE", bg="purple", fg="white",
+          command=remove_from_drop_zone).pack(side=tk.LEFT, padx=5)
 
 # -----------------------------
 # UPDATE BLOCKED
@@ -434,7 +471,13 @@ def update_superban():
 # -----------------------------
 
 def update_drop_zone():
+    global selected_drop_ip
+
+    current_ip = selected_drop_ip
+
     drop_listbox.delete(0, tk.END)
+
+    restored_index = None
 
     try:
         result = subprocess.run(
@@ -448,8 +491,17 @@ def update_drop_zone():
         if not ips:
             drop_listbox.insert(tk.END, "No IPs in DROP ZONE")
         else:
-            for ip in sorted(ips):
+            for i, ip in enumerate(sorted(ips)):
                 drop_listbox.insert(tk.END, ip)
+
+                if current_ip and ip == extract_ip(current_ip):
+                    restored_index = i
+
+        # restaurar selección
+        if restored_index is not None:
+            drop_listbox.selection_set(restored_index)
+            drop_listbox.activate(restored_index)
+            drop_listbox.see(restored_index)
 
     except Exception as e:
         drop_listbox.insert(tk.END, f"ERROR: {e}")
@@ -484,7 +536,7 @@ def read_output():
 # INIT
 # -----------------------------
 safe_log("[*] GUI started")
-safe_log("The IPs in SUPERBAN are banned PERMANENTLY until manual unban. The IPs in DROP ZONE are banned automatically when a Suricata alert fires that match rules (ET DROP|ET TOR|ET MALWARE|SCAN|EXPLOIT). Every time this program launches it clears the Drop Zone, then add the matching IPs from Suricata log (1 day lifespan) to Drop Zone. Superbanned IPs are added also permanent.")
+safe_log("The IPs in SUPERBAN are banned PERMANENTLY until manual unban. The IPs in DROP ZONE are banned automatically when a Suricata alert fires that match rules in config.json. Every time this program launches it clears the Drop Zone, then add the matching IPs from Suricata log (1 day lifespan) to Drop Zone. Superbanned IPs are added also permanent.")
 
 update_blocked()
 update_superban()
